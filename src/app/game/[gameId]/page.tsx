@@ -36,6 +36,43 @@ export default function GamePage({
     setUsername(localStorage.getItem('chess_username'));
   }, []);
 
+  // Call Stockfish and submit its move — called directly, not via useEffect
+  const triggerAiMove = useCallback(async (currentGame: GameData) => {
+    if (!currentGame.isAiGame || currentGame.status !== 'ACTIVE') return;
+    if (aiMovePending.current) return;
+
+    const chess = new Chess(currentGame.fen);
+    const isStockfishTurn =
+      (currentGame.whitePlayer === 'Stockfish' && chess.turn() === 'w') ||
+      (currentGame.blackPlayer === 'Stockfish' && chess.turn() === 'b');
+    if (!isStockfishTurn) return;
+
+    aiMovePending.current = true;
+    setAiThinking(true);
+
+    try {
+      const aiRes = await fetch(`/api/ai-move?fen=${encodeURIComponent(currentGame.fen)}`);
+      const { from, to, promotion, error } = await aiRes.json();
+      if (error || !from) throw new Error(error ?? 'No move returned');
+
+      const moveRes = await fetch(`/api/games/${gameId}/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'Stockfish', from, to, promotion }),
+      });
+      const data = await moveRes.json();
+      if (data?.id) {
+        lastUpdatedAt.current = data.updatedAt;
+        setGame(data);
+      }
+    } catch {
+      setMoveError('Stockfish engine unavailable — try again shortly');
+    } finally {
+      aiMovePending.current = false;
+      setAiThinking(false);
+    }
+  }, [gameId]);
+
   const fetchGame = useCallback(async () => {
     try {
       const res = await fetch(`/api/games/${gameId}`);
@@ -45,17 +82,18 @@ export default function GamePage({
         return;
       }
       const data: GameData = await res.json();
-      // Only update state when the server has new data
       if (data.updatedAt !== lastUpdatedAt.current) {
         lastUpdatedAt.current = data.updatedAt;
         setGame(data);
+        // If AI game and it's Stockfish's turn on load (e.g. user plays Black)
+        triggerAiMove(data);
       }
     } catch {
       // silent on poll errors
     } finally {
       setLoading(false);
     }
-  }, [gameId]);
+  }, [gameId, triggerAiMove]);
 
   // Initial load + 2-second polling
   useEffect(() => {
@@ -63,47 +101,6 @@ export default function GamePage({
     const interval = setInterval(fetchGame, 2000);
     return () => clearInterval(interval);
   }, [fetchGame]);
-
-  // Trigger Stockfish move when it's the AI's turn
-  useEffect(() => {
-    if (!game || !game.isAiGame || game.status !== 'ACTIVE') return;
-    if (aiMovePending.current) return;
-
-    const chess = new Chess(game.fen);
-    const isStockfishTurn =
-      (game.whitePlayer === 'Stockfish' && chess.turn() === 'w') ||
-      (game.blackPlayer === 'Stockfish' && chess.turn() === 'b');
-
-    if (!isStockfishTurn) return;
-
-    aiMovePending.current = true;
-    setAiThinking(true);
-
-    fetch(`/api/ai-move?fen=${encodeURIComponent(game.fen)}`)
-      .then((r) => r.json())
-      .then(async ({ from, to, promotion, error }) => {
-        if (error || !from) throw new Error(error ?? 'No move returned');
-        const res = await fetch(`/api/games/${gameId}/move`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: 'Stockfish', from, to, promotion }),
-        });
-        return res.json();
-      })
-      .then((data) => {
-        if (data?.id) {
-          lastUpdatedAt.current = data.updatedAt;
-          setGame(data);
-        }
-      })
-      .catch(() => {
-        setMoveError('Stockfish engine unavailable — try again shortly');
-      })
-      .finally(() => {
-        aiMovePending.current = false;
-        setAiThinking(false);
-      });
-  }, [game?.fen, game?.isAiGame, game?.status, gameId]);
 
   function saveUsername(name: string) {
     localStorage.setItem('chess_username', name);
@@ -155,7 +152,7 @@ export default function GamePage({
     // Optimistically show the move on the board immediately
     setGame((prev) => prev ? { ...prev, fen: chess.fen() } : prev);
 
-    // Fire API call in background — polling will sync full state
+    // Confirm move on server, then immediately trigger AI if needed
     fetch(`/api/games/${gameId}/move`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -169,6 +166,7 @@ export default function GamePage({
         } else {
           lastUpdatedAt.current = data.updatedAt;
           setGame(data);
+          triggerAiMove(data); // fire immediately — don't wait for polling
         }
       })
       .catch(() => {
