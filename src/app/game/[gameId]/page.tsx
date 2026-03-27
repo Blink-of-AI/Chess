@@ -4,6 +4,7 @@ import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { MoveList } from '@/components/MoveList';
 import { UsernameModal } from '@/components/UsernameModal';
+import { GameEndModal } from '@/components/GameEndModal';
 import {
   parseMovePairs,
   getStatusText,
@@ -29,8 +30,10 @@ export default function GamePage({
   const [drawLoading, setDrawLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [aiThinking, setAiThinking] = useState(false);
+  const [showEndModal, setShowEndModal] = useState(false);
   const lastUpdatedAt = useRef<string | null>(null);
   const aiMovePending = useRef(false);
+  const endModalShown = useRef(false);
 
   // Load username from localStorage
   useEffect(() => {
@@ -102,6 +105,14 @@ export default function GamePage({
     const interval = setInterval(fetchGame, 2000);
     return () => clearInterval(interval);
   }, [fetchGame]);
+
+  // Show end-game modal when game finishes (once)
+  useEffect(() => {
+    if (game?.status === 'FINISHED' && game.result && !endModalShown.current) {
+      endModalShown.current = true;
+      setShowEndModal(true);
+    }
+  }, [game?.status, game?.result]);
 
   function saveUsername(name: string) {
     localStorage.setItem('chess_username', name);
@@ -270,8 +281,8 @@ export default function GamePage({
     !game.blackPlayer;
 
   const canResign = isPlayer && game.status === 'ACTIVE';
-  const opponentOfferedDraw = game.drawOfferedBy !== null && game.drawOfferedBy !== username;
-  const iOfferedDraw = game.drawOfferedBy === username;
+  const opponentOfferedDraw = !!game.drawOfferedBy && game.drawOfferedBy !== username;
+  const iOfferedDraw = !!game.drawOfferedBy && game.drawOfferedBy === username;
   const canOfferDraw = isPlayer && game.status === 'ACTIVE' && !game.isAiGame && !iOfferedDraw && !opponentOfferedDraw;
 
   const statusColor =
@@ -286,6 +297,15 @@ export default function GamePage({
   return (
     <div className="min-h-screen bg-gray-950">
       {!username && <UsernameModal onSave={saveUsername} />}
+      {showEndModal && game?.result && username && (
+        <GameEndModal
+          result={game.result}
+          whitePlayer={game.whitePlayer}
+          blackPlayer={game.blackPlayer ?? ''}
+          username={username}
+          onClose={() => setShowEndModal(false)}
+        />
+      )}
 
       {/* Header */}
       <header className="border-b border-gray-800 bg-gray-900/50 sticky top-0 z-10 backdrop-blur">
