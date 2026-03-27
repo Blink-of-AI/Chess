@@ -88,40 +88,52 @@ export default function GamePage({
     }
   }
 
-  async function onPieceDrop(
-    sourceSquare: string,
-    targetSquare: string
-  ): Promise<boolean> {
+  function onPieceDrop(sourceSquare: string, targetSquare: string): boolean {
     if (!username || !game) return false;
     setMoveError(null);
 
-    // Detect pawn promotion
+    // Validate move locally with chess.js first (synchronous)
     const chess = new Chess(game.fen);
-    const moves = chess.moves({ square: sourceSquare as Parameters<typeof chess.moves>[0]['square'], verbose: true });
-    const isPromotion = moves.some(
-      (m) => 'to' in m && m.to === targetSquare && m.flags.includes('p')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const verboseMoves = chess.moves({ square: sourceSquare as any, verbose: true });
+    const isPromotion = verboseMoves.some(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (m: any) => m.to === targetSquare && m.flags.includes('p')
     );
 
-    const res = await fetch(`/api/games/${gameId}/move`, {
+    let move;
+    try {
+      move = chess.move({ from: sourceSquare, to: targetSquare, promotion: isPromotion ? 'q' : undefined });
+    } catch {
+      return false; // illegal move — board snaps back
+    }
+    if (!move) return false;
+
+    // Optimistically show the move on the board immediately
+    setGame((prev) => prev ? { ...prev, fen: chess.fen() } : prev);
+
+    // Fire API call in background — polling will sync full state
+    fetch(`/api/games/${gameId}/move`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username,
-        from: sourceSquare,
-        to: targetSquare,
-        promotion: isPromotion ? 'q' : undefined, // auto-promote to queen
-      }),
-    });
+      body: JSON.stringify({ username, from: sourceSquare, to: targetSquare, promotion: isPromotion ? 'q' : undefined }),
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) {
+          setMoveError(data.error);
+          fetchGame(); // revert to server state
+        } else {
+          lastUpdatedAt.current = data.updatedAt;
+          setGame(data);
+        }
+      })
+      .catch(() => {
+        setMoveError('Move failed — connection error');
+        fetchGame();
+      });
 
-    const data = await res.json();
-    if (!res.ok) {
-      setMoveError(data.error);
-      return false;
-    }
-
-    lastUpdatedAt.current = data.updatedAt;
-    setGame(data);
-    return true;
+    return true; // return synchronously so the board accepts the move
   }
 
   async function resign() {
