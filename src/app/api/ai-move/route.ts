@@ -21,11 +21,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'No move available (game may be over)' }, { status: 400 });
     }
 
-    // UCI move format: "e2e4" or "e7e8q" (promotion)
-    const move: string = data.bestmove;
-    const from = move.slice(0, 2);
-    const to = move.slice(2, 4);
-    const promotion = move.length > 4 ? move[4] : undefined;
+    // API returns e.g. "bestmove e7e5 ponder g1f3" — extract the UCI move part
+    const uciMove: string = data.bestmove.split(' ')[1];
+    const from = uciMove.slice(0, 2);
+    const to = uciMove.slice(2, 4);
+    const promotion = uciMove.length > 4 ? uciMove[4] : undefined;
 
     return NextResponse.json({
       from,
