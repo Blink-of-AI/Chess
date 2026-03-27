@@ -108,12 +108,14 @@ Open http://localhost:3000
 - Auto-detect check / checkmate / draw
 - Board orientation per player
 - No login required — just a username
+- Stockfish AI opponent (~2400 ELO, depth 15)
+- Game mode selection: invite friend or play vs AI
+- Choose color (White / Black / Random) vs AI
 
 ## Planned (v2)
 
 - Move clocks / time controls
 - Draw offers
 - Move sound effects
-- Stockfish AI opponent
-- ELO rating
-- Pusher/WebSocket for instant updates
+- ELO rating system
+- Pusher/WebSocket for instant updates (replace polling)
