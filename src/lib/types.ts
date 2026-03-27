@@ -21,5 +21,6 @@ export interface GameData {
   status: GameStatus;
   result: string | null;
   isAiGame: boolean;
+  drawOfferedBy: string | null;
   moves: MoveData[];
 }

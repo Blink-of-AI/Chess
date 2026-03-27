@@ -26,6 +26,7 @@ export default function GamePage({
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [resigning, setResigning] = useState(false);
+  const [drawLoading, setDrawLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [aiThinking, setAiThinking] = useState(false);
   const lastUpdatedAt = useRef<string | null>(null);
@@ -197,6 +198,27 @@ export default function GamePage({
     }
   }
 
+  async function drawAction(action: 'offer' | 'accept' | 'decline') {
+    if (!username) return;
+    setDrawLoading(true);
+    try {
+      const res = await fetch(`/api/games/${gameId}/draw`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, action }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        lastUpdatedAt.current = data.updatedAt;
+        setGame(data);
+      } else {
+        setMoveError(data.error);
+      }
+    } finally {
+      setDrawLoading(false);
+    }
+  }
+
   function copyShareLink() {
     navigator.clipboard.writeText(window.location.href);
     setCopied(true);
@@ -247,7 +269,10 @@ export default function GamePage({
     game.whitePlayer !== username &&
     !game.blackPlayer;
 
-  const canResign = isPlayer && game.status === 'ACTIVE' && !game.isAiGame;
+  const canResign = isPlayer && game.status === 'ACTIVE';
+  const opponentOfferedDraw = game.drawOfferedBy !== null && game.drawOfferedBy !== username;
+  const iOfferedDraw = game.drawOfferedBy === username;
+  const canOfferDraw = isPlayer && game.status === 'ACTIVE' && !game.isAiGame && !iOfferedDraw && !opponentOfferedDraw;
 
   const statusColor =
     game.status === 'FINISHED'
@@ -406,15 +431,64 @@ export default function GamePage({
               </div>
             )}
 
-            {/* Resign */}
+            {/* Draw offer — opponent offered */}
+            {opponentOfferedDraw && (
+              <div className="border border-amber-600/40 bg-amber-500/10 rounded-lg p-4 space-y-3">
+                <p className="text-amber-300 text-sm font-medium">
+                  🤝 {game.drawOfferedBy} offers a draw
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => drawAction('accept')}
+                    disabled={drawLoading}
+                    className="flex-1 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-semibold text-sm rounded-lg transition-colors"
+                  >
+                    Accept
+                  </button>
+                  <button
+                    onClick={() => drawAction('decline')}
+                    disabled={drawLoading}
+                    className="flex-1 py-2 border border-gray-600 hover:bg-gray-800 disabled:opacity-50 text-gray-300 text-sm rounded-lg transition-colors"
+                  >
+                    Decline
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Draw offer — I offered, waiting */}
+            {iOfferedDraw && (
+              <div className="border border-gray-700 rounded-lg px-4 py-3 flex items-center justify-between">
+                <span className="text-gray-400 text-sm">Draw offered...</span>
+                <button
+                  onClick={() => drawAction('decline')}
+                  className="text-gray-600 hover:text-gray-400 text-xs underline"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {/* Offer Draw + Resign row */}
             {canResign && (
-              <button
-                onClick={resign}
-                disabled={resigning}
-                className="w-full py-2 border border-red-900/50 hover:bg-red-900/20 text-red-500 text-sm rounded-lg transition-colors"
-              >
-                {resigning ? 'Resigning...' : 'Resign'}
-              </button>
+              <div className="flex gap-2">
+                {canOfferDraw && (
+                  <button
+                    onClick={() => drawAction('offer')}
+                    disabled={drawLoading}
+                    className="flex-1 py-2 border border-gray-600 hover:bg-gray-800 disabled:opacity-50 text-gray-400 hover:text-gray-200 text-sm rounded-lg transition-colors"
+                  >
+                    ½ Draw
+                  </button>
+                )}
+                <button
+                  onClick={resign}
+                  disabled={resigning}
+                  className="flex-1 py-2 border border-red-900/50 hover:bg-red-900/20 text-red-500 text-sm rounded-lg transition-colors"
+                >
+                  {resigning ? 'Resigning...' : 'Resign'}
+                </button>
+              </div>
             )}
           </div>
         </div>

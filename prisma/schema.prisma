@@ -16,8 +16,9 @@ model Game {
   pgn         String   @default("")
   fen         String   @default("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
   status      String   @default("WAITING") // WAITING | ACTIVE | FINISHED
-  result      String?  // "1-0" | "0-1" | "1/2-1/2"
-  isAiGame    Boolean  @default(false)
+  result        String?  // "1-0" | "0-1" | "1/2-1/2"
+  isAiGame      Boolean  @default(false)
+  drawOfferedBy String?  // username of player who offered a draw
   moves       Move[]
 }
 

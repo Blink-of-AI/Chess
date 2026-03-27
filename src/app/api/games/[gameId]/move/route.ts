@@ -62,6 +62,7 @@ export async function POST(
           pgn: chess.pgn(),
           status: newStatus,
           result,
+          drawOfferedBy: null, // moving cancels any pending draw offer
         },
         include: { moves: { orderBy: { moveNumber: 'asc' } } },
       }),
