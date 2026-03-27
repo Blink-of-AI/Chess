@@ -27,7 +27,9 @@ export default function GamePage({
   const [joining, setJoining] = useState(false);
   const [resigning, setResigning] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [aiThinking, setAiThinking] = useState(false);
   const lastUpdatedAt = useRef<string | null>(null);
+  const aiMovePending = useRef(false);
 
   // Load username from localStorage
   useEffect(() => {
@@ -61,6 +63,47 @@ export default function GamePage({
     const interval = setInterval(fetchGame, 2000);
     return () => clearInterval(interval);
   }, [fetchGame]);
+
+  // Trigger Stockfish move when it's the AI's turn
+  useEffect(() => {
+    if (!game || !game.isAiGame || game.status !== 'ACTIVE') return;
+    if (aiMovePending.current) return;
+
+    const chess = new Chess(game.fen);
+    const isStockfishTurn =
+      (game.whitePlayer === 'Stockfish' && chess.turn() === 'w') ||
+      (game.blackPlayer === 'Stockfish' && chess.turn() === 'b');
+
+    if (!isStockfishTurn) return;
+
+    aiMovePending.current = true;
+    setAiThinking(true);
+
+    fetch(`/api/ai-move?fen=${encodeURIComponent(game.fen)}`)
+      .then((r) => r.json())
+      .then(async ({ from, to, promotion, error }) => {
+        if (error || !from) throw new Error(error ?? 'No move returned');
+        const res = await fetch(`/api/games/${gameId}/move`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: 'Stockfish', from, to, promotion }),
+        });
+        return res.json();
+      })
+      .then((data) => {
+        if (data?.id) {
+          lastUpdatedAt.current = data.updatedAt;
+          setGame(data);
+        }
+      })
+      .catch(() => {
+        setMoveError('Stockfish engine unavailable — try again shortly');
+      })
+      .finally(() => {
+        aiMovePending.current = false;
+        setAiThinking(false);
+      });
+  }, [game?.fen, game?.isAiGame, game?.status, gameId]);
 
   function saveUsername(name: string) {
     localStorage.setItem('chess_username', name);
@@ -196,7 +239,9 @@ export default function GamePage({
       (playerColor === 'black' && chess.turn() === 'b'));
 
   const movePairs = parseMovePairs(game.pgn);
-  const statusText = username ? getStatusText(game, username) : 'Spectating';
+  const statusText = aiThinking
+    ? '🤖 Stockfish is thinking...'
+    : username ? getStatusText(game, username) : 'Spectating';
 
   const canJoin =
     game.status === 'WAITING' &&
@@ -204,7 +249,7 @@ export default function GamePage({
     game.whitePlayer !== username &&
     !game.blackPlayer;
 
-  const canResign = isPlayer && game.status === 'ACTIVE';
+  const canResign = isPlayer && game.status === 'ACTIVE' && !game.isAiGame;
 
   const statusColor =
     game.status === 'FINISHED'

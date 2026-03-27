@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { UsernameModal } from '@/components/UsernameModal';
+import { GameModeModal } from '@/components/GameModeModal';
 import { GameCard } from '@/components/GameCard';
 import type { GameData } from '@/lib/types';
 import Link from 'next/link';
@@ -13,6 +14,7 @@ export default function LobbyPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [showModeModal, setShowModeModal] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem('chess_username');
@@ -39,7 +41,7 @@ export default function LobbyPage() {
     setUsername(name);
   }
 
-  async function createGame() {
+  async function createGame(mode: 'human' | 'ai', aiColor?: 'white' | 'black' | 'random') {
     if (!username) return;
     setCreating(true);
     setCreateError(null);
@@ -47,16 +49,17 @@ export default function LobbyPage() {
       const res = await fetch('/api/games', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username }),
+        body: JSON.stringify({ username, isAiGame: mode === 'ai', aiColor }),
       });
       const data = await res.json();
       if (res.ok) {
+        setShowModeModal(false);
         router.push(`/game/${data.id}`);
       } else {
         setCreateError(data.error ?? 'Failed to create game');
       }
     } catch {
-      setCreateError('Cannot reach server — make sure npm run dev is running and the DB is set up (npm run db:push).');
+      setCreateError('Cannot reach server.');
     } finally {
       setCreating(false);
     }
@@ -75,6 +78,13 @@ export default function LobbyPage() {
   return (
     <div className="min-h-screen bg-gray-950">
       {!username && <UsernameModal onSave={saveUsername} />}
+      {showModeModal && (
+        <GameModeModal
+          onClose={() => setShowModeModal(false)}
+          onCreate={createGame}
+          creating={creating}
+        />
+      )}
 
       {/* Header */}
       <header className="border-b border-gray-800 bg-gray-900/50 sticky top-0 z-10 backdrop-blur">
@@ -120,12 +130,12 @@ export default function LobbyPage() {
           </div>
           <div className="flex flex-col items-end gap-2">
             <button
-              onClick={createGame}
-              disabled={!username || creating}
+              onClick={() => username ? setShowModeModal(true) : undefined}
+              disabled={!username}
               title={!username ? 'Enter a username first' : undefined}
               className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:bg-gray-800 disabled:text-gray-600 disabled:cursor-not-allowed text-black font-bold rounded-lg transition-colors text-sm"
             >
-              {creating ? 'Creating...' : !username ? '+ New Game (set username first)' : '+ New Game'}
+              {!username ? '+ New Game (set username first)' : '+ New Game'}
             </button>
             {createError && (
               <p className="text-red-400 text-xs max-w-xs text-right">{createError}</p>

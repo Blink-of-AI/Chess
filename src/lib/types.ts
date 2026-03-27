@@ -20,5 +20,6 @@ export interface GameData {
   fen: string;
   status: GameStatus;
   result: string | null;
+  isAiGame: boolean;
   moves: MoveData[];
 }
