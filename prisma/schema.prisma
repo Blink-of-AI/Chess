@@ -1,0 +1,32 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Game {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  whitePlayer String
+  blackPlayer String?
+  pgn         String   @default("")
+  fen         String   @default("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+  status      String   @default("WAITING") // WAITING | ACTIVE | FINISHED
+  result      String?  // "1-0" | "0-1" | "1/2-1/2"
+  moves       Move[]
+}
+
+model Move {
+  id         String   @id @default(cuid())
+  gameId     String
+  game       Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  moveNumber Int
+  san        String   // Standard Algebraic Notation e.g. "Nf3"
+  uci        String   // UCI format e.g. "g1f3"
+  fen        String   // Board state after this move (for replay)
+  createdAt  DateTime @default(now())
+}
